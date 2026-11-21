@@ -3,7 +3,7 @@
 -- a button in the replay player practises the mistakes nearest to where the replay is
 
 local UE = CS.UnityEngine
-local Input, Screen, Time = UE.Input, UE.Screen, UE.Time
+local Input, Screen = UE.Input, UE.Screen
 local kit = phigrospp.ui
 
 local TAB = "Practice"
@@ -44,18 +44,8 @@ local function begin()
   resetScore()
   local blocks = run.judge.previewElementUpdateControl
   if blocks.HasBlocks then blocks:DestroyAndCreateAllBlocks() end -- the ones gone by come back
-  run.clock, run.music.audioSource.pitch = from + progress._offset, speed()
-end
-
--- the game's time is the music's, read from a clock that doesn't follow its pitch: ours is given instead before the
--- game reads it. AudioSource.time follows the pitch but moves a buffer at a time, so ours runs by itself, pulled to it
-local function tick(progress)
-  local music = run.music
-  if not run.clock or not progress.isPlaying or music.CurrentStatus ~= 0 then return end
-  local source = music.audioSource
-  local clock, heard = run.clock + Time.deltaTime * source.pitch, source.time
-  run.clock = math.abs(heard - clock) > 0.12 and heard or clock + (heard - clock) * 0.05
-  music.time = run.clock
+  phigrospp.speed(speed())
+  run.begun = true
 end
 
 local function clock(t) return ("%d:%04.1f"):format(t // 60, t % 60) end
@@ -186,16 +176,11 @@ on("song", function(chart)
   if not (enabled() or once) or replaying() then return end
   local level = UE.Object.FindObjectOfType(CS.LevelControl)
   local progress = level.progressControl
-  run = { progress = progress, judge = progress.judgeControl, score = progress.scoreControl, music = progress.audioSource }
+  run = { progress = progress, judge = progress.judgeControl, score = progress.scoreControl }
   key = chart.id .. "." .. chart.difficulty
-  run.hook = hook(CS.ProgressControl, "Update", { before = tick })
 end)
 
-on("leave", function()
-  if not run then return end
-  unhook(run.hook)
-  run = nil
-end)
+on("leave", function() run = nil end)
 
 -- every resume plays the section from its start
 on("resume", function()
@@ -209,7 +194,6 @@ on("update", function()
     -- the level opens paused on its timeline, once the game knows how long the music is
     if progress._audioLength <= 0 then return end
     if progress._inChallengeMode then
-      unhook(run.hook)
       run = nil
       return
     end
@@ -226,7 +210,7 @@ on("update", function()
   end
   editor.go:SetActive(not progress.isPlaying)
   if progress.isPlaying then
-    if run.clock and progress.nowTime >= run.section.b then
+    if run.begun and progress.nowTime >= run.section.b then
       if loop() then begin() else progress:Play(false) end
     end
     return
