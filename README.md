@@ -2,13 +2,15 @@
 
 A mod for [Phigros++](https://github.com/ggmolly/PhigrosPlusPlus) that adds a Practice switch next to the song list's Mirror one. With it on, a song opens paused on a timeline: drag the two ends of the section to practise, pick a speed from 0.25× to 2× and whether the section loops, then resume. The section plays from two seconds before its start every time, with the score and the counts back at zero, and the song never ends, so nothing of it is saved: no record, no replay, nothing sent to phigros.tools.
 
-![The ends of a section dragged on the timeline, then the section played at 0.6×](preview.gif)
+![The ends of a section dragged on the timeline, the speed set, then the section played](preview.gif)
 
 ## Install
 
 Open the **Mods** tab of the game's settings and pick Practice in the catalog, or open [this link](phigrospp://install/ggmolly/phigrospp-practice) on the device.
 
 ## Settings
+
+![The Practice switch lit next to Mirror on the song list](switch.jpg)
 
 | Setting | |
 |---|---|
@@ -17,6 +19,8 @@ Open the **Mods** tab of the game's settings and pick Practice in the catalog, o
 | Loop the section | Off, the song pauses at the section's end |
 
 The speed and the loop are also on the timeline, which shows whenever the song is paused. Dragging an end of the section shows the chart there.
+
+![The timeline with a section from 0:34.7 to 0:59.1, the speed at 0.95× and the loop switch](timeline.jpg)
 
 ## How it works
 
