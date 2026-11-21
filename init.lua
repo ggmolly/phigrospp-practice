@@ -128,28 +128,11 @@ local function touch(e, t)
   end
 end
 
--- the switch: a copy of the Mirror one on its right, moving and hiding with it, coloured like it is on and off
+-- the switch, by the song list's Mirror one
 on("scene", function(name)
   if name ~= "SongSelector" then return end
   once = nil
-  local mirror = UE.Object.FindObjectOfType(CS.SongSelector).mirrorTextSize.transform
-  local switch = UE.Object.Instantiate(mirror.gameObject, mirror.parent, false).transform
-  switch.name = "practice-switch"
-  switch:SetParent(mirror, false)
-  switch.anchorMin, switch.anchorMax, switch.pivot, switch.anchoredPosition = { 1, 0.5 }, { 1, 0.5 }, { 0, 0.5 }, { 92, 0 }
-  local back, text = phigrospp.find(switch, "Button"), phigrospp.find(switch, "Text"):GetComponent(UE.UI.Text)
-  switch:GetComponent(UE.UI.Text).text, text.text = "Practice", "Practice"
-  local function paint()
-    back:GetComponent(CS.Lean.Gui.LeanPolygon).color = enabled() and { 1, 1, 1, 0.75 } or { 0, 0, 0, 0.5 }
-    text.color = enabled() and { 0, 0, 0, 1 } or { 1, 1, 1, 0.7 }
-  end
-  local button = back:GetComponent(UE.UI.Button)
-  button.onClick = UE.UI.Button.ButtonClickedEvent()
-  phigrospp.click(button, function()
-    enabled(not enabled())
-    paint()
-  end)
-  paint()
+  phigrospp.ui.switch("Practice", enabled, function() enabled(not enabled()) end)
 end)
 
 -- the mistakes of a replay closest to t as a section, the moment around t when it has none
