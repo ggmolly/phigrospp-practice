@@ -1,6 +1,6 @@
 # Practice
 
-A mod for [Phigros++](https://github.com/ggmolly/PhigrosPlusPlus) that adds a Practice switch next to the song list's Mirror one. With it on, a song opens paused on a timeline: drag the two ends of the section to practise, pick a speed from 0.25× to 2× and whether the section loops, then resume. The section plays from two seconds before its start every time, with the score and the counts back at zero, and the song never ends, so nothing of it is saved: no record, no replay, nothing sent to phigros.tools.
+A mod for [Phigros++](https://github.com/ggmolly/PhigrosPlusPlus) that adds a Practice switch next to the song list's Mirror one. With it on, a song opens paused on a timeline: drag the two ends of the section to practise, pick a speed from 0.25× to 2× and whether the section loops, then resume. The section plays from two seconds before its start every time, with the score and the counts back at zero, and the song never ends, so nothing of it is saved: no record, no replay, nothing sent to phigros.tools. A button in the replay player starts the same practice on the mistakes of the replay being watched.
 
 ![The ends of a section dragged on the timeline, the speed set, then the section played](preview.gif)
 
@@ -22,10 +22,20 @@ The speed and the loop are also on the timeline, which shows whenever the song i
 
 ![The timeline with a section from 0:34.7 to 0:59.1, the speed at 0.95× and the loop switch](timeline.jpg)
 
+## From a replay
+
+![The replay player with its seek bar marked where the replay went wrong, and a target button at the end of its row](replay.jpg)
+
+While a replay is watched, its player has one more button, a target. It starts the song again as a practice of the mistakes nearest to where the replay was: the goods, bads and misses less than two seconds apart make the section, with two seconds around them, and a replay without any mistake gives the four seconds around that moment. The practice lasts until the song list, whatever the Practice switch says.
+
+![The timeline with the replay's goods in blue and its bads and misses in red, the section set on a group of them from 0:50.8 to 1:16.2](mistakes.jpg)
+
+The timeline shows the replay's goods in blue and its bads and misses in red, so the section's ends can be moved with them in sight.
+
 ## How it works
 
 The game makes every note when a level starts and destroys each one once it's judged. To start a section, the mod asks Phigros++ to put the song two seconds before it (`phigrospp.jump`), which destroys the notes left, has the game make the ones up to the section's end again and moves the music, then it sets the score back to zero. The game's time comes from a clock that ignores the music's pitch, so at other speeds the mod gives it where the music really is.
 
 The level is told it can't end and that it doesn't count (`phigrospp.counts`), so it isn't recorded and the game never reaches the result screen, where it saves a play. Challenge mode and replays play as usual.
 
-It needs a Phigros++ newer than 0.3.0-beta.1, for `phigrospp.jump` and `phigrospp.counts`. On iOS it needs JIT, its hooks aren't written into the IPA.
+It needs a Phigros++ newer than 0.3.0-beta.3, for `phigrospp.replay.button`, `marks` and `takeover`. On iOS it needs JIT, its hooks aren't written into the IPA.

@@ -1,5 +1,6 @@
 -- practice: a switch next to the song list's Mirror one. on, a level never ends and nothing of it is kept: it opens
--- paused on a timeline to pick a section, a speed and whether it loops, and resuming plays that section from its start
+-- paused on a timeline to pick a section, a speed and whether it loops, and resuming plays that section from its start.
+-- a button in the replay player practises the mistakes nearest to where the replay is
 
 local UE = CS.UnityEngine
 local Input, Screen, Time = UE.Input, UE.Screen, UE.Time
@@ -13,10 +14,16 @@ local loop = setting("Loop the section", true, TAB)
 local LEAD = 2 -- seconds of music played before the section, at the speed picked
 local PREVIEW = 4 -- seconds of chart shown from a dragged end
 local SHORTEST = 1 -- seconds a section lasts at least
+local GAP, PAD = 2, 2 -- seconds: a replay's mistakes closer than GAP make one section, with PAD around them
+-- lucide's repeat and target
 local REPEAT = [[<path d="m17 2 4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="m7 22-4-4 4-4" />
-  <path d="M21 13v1a4 4 0 0 1-4 4H3" />]] -- lucide's repeat
+  <path d="M21 13v1a4 4 0 0 1-4 4H3" />]]
+local TARGET = [[<circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" />]]
+local GOOD, WRONG = { 0.63, 0.88, 1, 1 }, { 1, 0.36, 0.36, 1 } -- a replay's goods, its bads and misses
 
 local sections = {} -- the section picked for each chart since the game started, by song id and difficulty
+local mistakes = {} -- the marks of the replay each chart was last practised from, shown on its timeline
+local once -- practising from a replay until back on the song list, whatever the switch says
 local run, key -- the practice level (its components, chart, section and clock) and its chart's key in sections
 local editor -- its timeline, rebuilt with each level
 
@@ -75,6 +82,10 @@ local function build()
   local song = bar(e, width * 0.2, 210 * u, width * 0.6)
   e.song = song
   e.fill = kit.rect(parent, "practice-section", { 0, song.y }, { 0, 8 * u }, { 1, 1, 1, 0.9 })
+  for _, m in ipairs(mistakes[key] or {}) do
+    kit.rect(parent, "practice-mistake", { song.x + song.width * m.t / run.length - u, song.y }, { 2 * u, 24 * u },
+      m.judgement == "good" and GOOD or WRONG)
+  end
   local function ends(which, limit, anchor)
     knob(e, song, function() return run.section[which] / run.length end, function(f)
       run.section[which] = limit(f * run.length)
@@ -130,6 +141,7 @@ end
 -- the switch: a copy of the Mirror one on its right, moving and hiding with it, coloured like it is on and off
 on("scene", function(name)
   if name ~= "SongSelector" then return end
+  once = nil
   local mirror = UE.Object.FindObjectOfType(CS.SongSelector).mirrorTextSize.transform
   local switch = UE.Object.Instantiate(mirror.gameObject, mirror.parent, false).transform
   switch.name = "practice-switch"
@@ -150,13 +162,32 @@ on("scene", function(name)
   paint()
 end)
 
+-- the mistakes of a replay closest to t as a section, the moment around t when it has none
+local function nearest(marks, t)
+  local best, away, cluster = { a = t, b = t }, math.huge, nil
+  for _, m in ipairs(marks) do
+    if not cluster or m.t - cluster.b > GAP then cluster = { a = m.t } end
+    cluster.b = m.t
+    local distance = math.max(cluster.a - t, t - cluster.b, 0)
+    if distance < away then best, away = cluster, distance end
+  end
+  return { a = best.a - PAD, b = best.b + PAD }
+end
+
+-- in the replay player: the song starts again as a practice of what the replay got wrong around where it is
+phigrospp.replay.button(TARGET, function()
+  local chart, state, marks = playing(), phigrospp.replay.state(), phigrospp.replay.marks()
+  local k = chart.id .. "." .. chart.difficulty
+  sections[k], mistakes[k], once = nearest(marks, state.frames[math.max(state.cursor, 1)].t), marks, true
+  phigrospp.replay.takeover()
+end)
+
 on("song", function(chart)
-  if not enabled() or replaying() then return end
+  if not (enabled() or once) or replaying() then return end
   local level = UE.Object.FindObjectOfType(CS.LevelControl)
   local progress = level.progressControl
   run = { progress = progress, judge = progress.judgeControl, score = progress.scoreControl, music = progress.audioSource }
   key = chart.id .. "." .. chart.difficulty
-  progress.levelInformation.canLevelOver = false -- the game never ends the level, so nothing of it is saved
   run.hook = hook(CS.ProgressControl, "Update", { before = tick })
 end)
 
@@ -183,8 +214,10 @@ on("update", function()
       return
     end
     run.length = progress._audioLength - progress._offset - 0.25
-    sections[key] = sections[key] or { a = 0, b = run.length }
-    run.section = sections[key]
+    local section = sections[key] or { a = 0, b = run.length }
+    section.a, section.b = math.max(section.a, 0), math.min(section.b, run.length) -- one from a replay can stick out
+    sections[key], run.section = section, section
+    progress.levelInformation.canLevelOver = false -- the game never ends the level, so nothing of it is saved
     phigrospp.counts(false)
     run.blur = phigrospp.find(progress.pauseBar.transform, "Translucent Image (1)").gameObject
     editor = build()
