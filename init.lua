@@ -1,6 +1,6 @@
 -- practice: a switch next to the song list's Mirror one. on, a level never ends and nothing of it is kept: it opens
--- paused on a timeline to pick a section, a speed and whether it loops, and resuming plays that section from its start.
--- a button in the replay player practises the mistakes nearest to where the replay is
+-- paused on a timeline to pick a section, where to play it from, a speed and whether it loops, and resuming plays the
+-- section from there. a button in the replay player practises the mistakes nearest to where the replay is
 
 local UE = CS.UnityEngine
 local Input, Screen = UE.Input, UE.Screen
@@ -10,11 +10,12 @@ local TAB = "Practice"
 local enabled = setting("Practice mode", false, TAB)
 local speed = setting("Practice speed", 1.0, { 0.25, 2, step = 0.05, unit = "×" }, TAB)
 local loop = setting("Loop the section", true, TAB)
+local lead = setting("Lead-in", 0.0, { 0, 3, step = 0.5, unit = " s" }, TAB)
 
-local LEAD = 2 -- seconds of music played before the section, at the speed picked
 local PREVIEW = 4 -- seconds of chart shown from a dragged end
 local SHORTEST = 1 -- seconds a section lasts at least
 local GAP, PAD = 2, 2 -- seconds: a replay's mistakes closer than GAP make one section, with PAD around them
+local PLAYHEAD = { 1, 0.82, 0.3, 1 }
 -- lucide's repeat and target
 local REPEAT = [[<path d="m17 2 4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="m7 22-4-4 4-4" />
   <path d="M21 13v1a4 4 0 0 1-4 4H3" />]]
@@ -36,12 +37,13 @@ local function resetScore()
   if s.comboBlocked then s:UnblockCombo() end -- Petrichor's blocks lock the combo when touched
 end
 
--- the section from LEAD seconds of music before its start, with only its notes and a score of zero
-local function begin()
+-- the section from the playhead (its start when none is given), with only its notes from there on, after the
+-- lead-in of music picked. from its start the score is back at zero
+local function begin(from)
   local progress, section = run.progress, run.section
-  local from = math.max(section.a - LEAD * speed(), -progress._offset, 0)
-  phigrospp.jump(from, section.b)
-  resetScore()
+  from = from or section.a
+  phigrospp.jump(math.max(from - lead() * speed(), -progress._offset), section.b, from)
+  if from == section.a then resetScore() end
   local blocks = run.judge.previewElementUpdateControl
   if blocks.HasBlocks then blocks:DestroyAndCreateAllBlocks() end -- the ones gone by come back
   phigrospp.speed(speed())
@@ -50,13 +52,19 @@ end
 
 local function clock(t) return ("%d:%04.1f"):format(t // 60, t % 60) end
 
--- a knob sliding on a bar { x, y, width }: get() is where it is from 0 to 1, set(f) moves it, text() is written over
--- it, to the side its TextAnchor says
-local function knob(e, bar, get, set, text, anchor)
+
+-- a knob sliding on a bar { x, y, width }: get() is where it is from 0 to 1, set(f) moves it, text() is written by
+-- it, to the side its TextAnchor says. side puts it over the bar (1) or under it (-1), so two at the same place are
+-- told apart, and timed is the time it's at in seconds, typed when its text is tapped
+local function knob(e, bar, get, set, text, anchor, side, timed)
   local u, parent = e.u, e.go.transform
-  e.knobs[#e.knobs + 1] = { bar = bar, get = get, set = set, text = text,
-    image = kit.rect(parent, "practice-knob", { 0, bar.y }, { 8 * u, 48 * u }, { 1, 1, 1, 1 }, { 0.5, 0.5 }),
-    label = kit.text(parent, "practice-label", e.font, { 0, bar.y + 52 * u }, { 0, 0 }, 34 * u, anchor, { 0.5, 0.5 }) }
+  side = side or 0
+  local k = { bar = bar, get = get, set = set, text = text, anchor = anchor, side = side, timed = timed,
+    image = kit.rect(parent, "practice-knob", { 0, bar.y + side * 16 * u }, { 8 * u, 48 * u }, { 1, 1, 1, 1 }, { 0.5, 0.5 }),
+    label = kit.text(parent, "practice-label", e.font, { 0, bar.y + (side < 0 and -52 or 52) * u }, { 0, 0 }, 34 * u,
+      anchor, { 0.5, 0.5 }) }
+  e.knobs[#e.knobs + 1] = k
+  return k
 end
 
 local function bar(e, x, y, width)
@@ -76,14 +84,20 @@ local function build()
     kit.rect(parent, "practice-mistake", { song.x + song.width * m.t / run.length - u, song.y }, { 2 * u, 24 * u },
       m.judgement == "good" and GOOD or WRONG)
   end
+  -- an end moved puts the playhead back at the section's start
   local function ends(which, limit, anchor)
     knob(e, song, function() return run.section[which] / run.length end, function(f)
       run.section[which] = limit(f * run.length)
-      run.shown = run.section[which]
-    end, function() return clock(run.section[which]) end, anchor)
+      run.shown, run.at = run.section[which], run.section.a
+    end, function() return clock(run.section[which]) end, anchor, 1, function() return run.section[which] end)
   end
   ends("a", function(t) return math.min(t, run.section.b - SHORTEST) end, 5) -- MiddleRight
   ends("b", function(t) return math.max(t, run.section.a + SHORTEST) end, 3) -- MiddleLeft
+  -- the playhead, under the bar: where resuming plays from, inside the section
+  knob(e, song, function() return run.at / run.length end, function(f)
+    run.at = math.max(run.section.a, math.min(f * run.length, run.section.b - SHORTEST / 2))
+    run.shown = run.at
+  end, function() return clock(run.at) end, 4, -1, function() return run.at end).image.color = PLAYHEAD -- MiddleCenter
   local low, high, step = 0.25, 2, 0.05
   knob(e, bar(e, song.x, 90 * u, width * 0.25), function() return (speed() - low) / (high - low) end,
     function(f) speed(math.floor((low + f * (high - low)) / step + 0.5) * step) end,
@@ -99,8 +113,8 @@ local function draw(e)
     local f = k.get()
     if f ~= k.at then
       k.at = f
-      k.image.transform.anchoredPosition = { k.bar.x + k.bar.width * f, k.bar.y }
-      k.label.transform.anchoredPosition = { k.bar.x + k.bar.width * f, k.bar.y + 52 * e.u }
+      k.image.transform.anchoredPosition = { k.bar.x + k.bar.width * f, k.image.transform.anchoredPosition.y }
+      k.label.transform.anchoredPosition = { k.bar.x + k.bar.width * f, k.label.transform.anchoredPosition.y }
       k.label.text = k.text()
     end
   end
@@ -110,22 +124,49 @@ local function draw(e)
   e.loop.color = { 1, 1, 1, loop() and 1 or 0.3 }
 end
 
--- a touch starting on a knob drags it, the nearest one when two are close
+-- whether a point is on a knob's text, which starts, is centred or ends at the knob as its TextAnchor says
+local function written(e, k, x, y)
+  local at, wide = k.label.transform.anchoredPosition, k.label.preferredWidth
+  local left = at.x - wide * (k.anchor - 3) / 2
+  return math.abs(y - at.y) < 30 * e.u and x > left - 16 * e.u and x < left + wide + 16 * e.u
+end
+
+-- a touch starting on a knob drags it, the nearest one when two are close: one over the bar is taken from above it,
+-- one under it from below. a time tapped without moving is typed instead, in seconds: the system's number pad has
+-- no colon
 local function touch(e, t)
   local x, y, phase = t.m_Position.x, t.m_Position.y, t.m_Phase
   if t.m_FingerId == e.finger then
-    if phase == 3 or phase == 4 then e.finger = nil end -- Ended, Canceled
-    local k = e.dragged
-    return k.set(math.max(0, math.min(1, (x - k.bar.x) / k.bar.width)))
+    local k, over = e.dragged, phase == 3 or phase == 4 -- Ended, Canceled
+    if over then e.finger = nil end
+    e.moved = e.moved or math.abs(x - e.x) > 12 * e.u
+    if e.moved then return k.set(math.max(0, math.min(1, (x - k.bar.x) / k.bar.width))) end
+    if over and e.tapped then
+      e.typed = { knob = k, keyboard = UE.TouchScreenKeyboard.Open(("%.1f"):format(k.timed()), 2, false, false, false) } -- NumbersAndPunctuation
+    end
+    return
   end
   if phase ~= 0 or e.finger then return end -- Began
   local at = e.loop.transform.anchoredPosition
   if math.abs(x - at.x - 32 * e.u) < e.reach and math.abs(y - at.y) < e.reach then return loop(not loop()) end
   local nearest = e.reach
   for _, k in ipairs(e.knobs) do
-    local away = math.abs(x - k.bar.x - k.bar.width * k.at)
-    if math.abs(y - k.bar.y) < e.reach and away < nearest then nearest, e.finger, e.dragged = away, t.m_FingerId, k end
+    local away, up = math.abs(x - k.bar.x - k.bar.width * k.at), (y - k.bar.y) * (k.side == 0 and 1 or k.side)
+    local reached = k.side == 0 and math.abs(up) < e.reach or up > -8 * e.u and up < e.reach
+    local tapped = k.timed and written(e, k, x, y)
+    if tapped or reached and away < nearest then
+      nearest, e.finger, e.dragged, e.x, e.moved, e.tapped = tapped and 0 or away, t.m_FingerId, k, x, not tapped, tapped
+    end
   end
+end
+
+-- the keyboard closed: what was typed is where the knob goes, when it's a time
+local function typing(e)
+  local keyboard = e.typed.keyboard
+  if keyboard.status == 0 then return end -- Visible
+  local t = keyboard.status == 1 and tonumber(keyboard.text) -- Done
+  if t then e.typed.knob.set(math.max(0, math.min(1, t / run.length))) end
+  e.typed = nil
 end
 
 -- the switch, by the song list's Mirror one
@@ -165,9 +206,16 @@ end)
 
 on("leave", function() run = nil end)
 
--- every resume plays the section from its start
+-- a section paused goes on from there, one that ended or wasn't started from its start
+on("pause", function()
+  if not (run and run.begun) then return end
+  local t, section = run.progress.nowTime, run.section
+  run.at = t > section.a and t < section.b and t or section.a
+end)
+
+-- every resume plays the section from its playhead
 on("resume", function()
-  if run and run.length then begin() end
+  if run and run.length then begin(run.at) end
 end)
 
 on("update", function()
@@ -189,7 +237,7 @@ on("update", function()
     run.blur = phigrospp.find(progress.pauseBar.transform, "Translucent Image (1)").gameObject
     editor = build()
     progress:Play(false)
-    run.shown = run.section.a
+    run.shown, run.at = run.section.a, run.section.a
   end
   editor.go:SetActive(not progress.isPlaying)
   if progress.isPlaying then
@@ -198,7 +246,11 @@ on("update", function()
     end
     return
   end
-  for i = 0, Input.touchCount - 1 do touch(editor, Input.GetTouch(i)) end
+  if editor.typed then
+    typing(editor)
+  else
+    for i = 0, Input.touchCount - 1 do touch(editor, Input.GetTouch(i)) end
+  end
   -- the pause menu blurs the chart, which shows while an end of the section is dragged
   run.blur:SetActive(not (editor.finger and editor.dragged.bar == editor.song))
   draw(editor)
