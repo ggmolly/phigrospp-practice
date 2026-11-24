@@ -218,6 +218,11 @@ on("resume", function()
   if run and run.length then begin(run.at) end
 end)
 
+-- a restart resumes the song too, then plays the section from its start
+on("restart", function()
+  if run and run.length then begin() end
+end)
+
 on("update", function()
   if not run then return end
   local progress = run.progress
